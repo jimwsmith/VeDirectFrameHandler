@@ -7,6 +7,7 @@
  * 
  * Copyright (c) 2019 Victron Energy BV
  * Portions Copyright (C) 2020 Chris Terwilliger
+ * Portions Copyright (C) 2020 Jim Smith
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +30,7 @@
  * 2020.05.05 - 0.2 - initial release
  * 2020.06.21 - 0.2 - add MIT license, no code changes
  * 2020.08.20 - 0.3 - corrected #include reference
- * 
+ * 2020.10.05 - 0.4 - Added veFrameRead flag
  */
  
 #include <Arduino.h>
@@ -184,6 +185,7 @@ void VeDirectFrameHandler::frameEndEvent(bool valid) {
 				}
 			}
 		}
+		veFrameRead = true; //JWS flag that a frame has been processed and values updated
 	}
 	frameIndex = 0;	// reset frame
 }
