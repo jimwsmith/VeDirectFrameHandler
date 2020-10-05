@@ -4,7 +4,7 @@
  * Derived from Victron framehandler reference implementation.
  * 
  * 2020.05.05 - 0.2 - initial release
- * 2020.10.05 - JWS add veFrameRead flag
+ * 2020.10.05 - 0.4 JWS add veFrameRead flag
  */
 
 #ifndef FRAMEHANDLER_H_
