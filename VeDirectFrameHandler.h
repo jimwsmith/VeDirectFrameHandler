@@ -4,16 +4,16 @@
  * Derived from Victron framehandler reference implementation.
  * 
  * 2020.05.05 - 0.2 - initial release
- * 
+ * 2020.10.05 - JWS add veFrameRead flag
  */
 
 #ifndef FRAMEHANDLER_H_
 #define FRAMEHANDLER_H_
 
 const byte frameLen = 18;                       // VE.Direct Protocol: max frame size is 18
-const byte nameLen = 9;                         // VE.Direct Protocol: max name size is 9 including /0
-const byte valueLen = 33;                       // VE.Direct Protocol: max value size is 33 including /0
-const byte buffLen = 40;                        // Maximum number of lines possible from the device. Current protocol shows this to be the BMV700 at 33 lines.
+const byte nameLen = 6; //9;                         // VE.Direct Protocol: max name size is 9 including /0
+const byte valueLen = 10; //33;                       // VE.Direct Protocol: max value size is 33 including /0
+const byte buffLen = 40; //40;                        // Maximum number of lines possible from the device. Current protocol shows this to be the BMV700 at 33 lines.
 
 
 class VeDirectFrameHandler {
@@ -27,6 +27,7 @@ public:
 
     int frameIndex;                             // which line of the frame are we on
     int veEnd;                                  // current size (end) of the public buffer
+    boolean veFrameRead;                        // JWS flag to signal that at least one complete frame has been read
 
 private:
     //bool mStop;                               // not sure what Victron uses this for, not using
