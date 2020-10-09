@@ -31,6 +31,7 @@
  * 2020.06.21 - 0.2 - add MIT license, no code changes
  * 2020.08.20 - 0.3 - corrected #include reference
  * 2020.10.05 - 0.4 - Added veFrameRead flag
+ * 2020.10.08 - 0.5 - prevent private frame buffer overruns if too many name value pairs are received
  */
  
 #include <Arduino.h>
@@ -67,76 +68,76 @@ void VeDirectFrameHandler::rxData(uint8_t inbyte)
 		mState = RECORD_HEX;
 	}
 	if (mState != RECORD_HEX) {
-		mChecksum += inbyte;
+		mChecksum += inbyte;  //cyclic add of received char to checksum (even if the buffer is too small to hold it)
 	}
 	inbyte = toupper(inbyte);
 
 	switch(mState) {
 	case IDLE:
-		/* wait for \n of the start of an record */
+		/* wait for \n of the start of a new line.  If we are part way through a block of lines when we start, the checksum will fail*/
 		switch(inbyte) {
+		case '\r': /* Skip as all lines terminate with CR, LF */
+		default:
+			break;
 		case '\n':
 			mState = RECORD_BEGIN;
-			break;
-		case '\r': /* Skip */
-		default:
 			break;
 		}
 		break;
 	case RECORD_BEGIN:
-		mTextPointer = mName;
+		mTextPointer = mName;  //We start by receiving the field name text
 		*mTextPointer++ = inbyte;
 		mState = RECORD_NAME;
 		break;
 	case RECORD_NAME:
-		// The record name is being received, terminated by a \t
+		// subsequent characters in the record name is being received, terminated by a \t
 		switch(inbyte) {
-		case '\t':
+		case '\t': //Tab signals end of Name field and start of Checksum or Value field
 			// the Checksum record indicates a EOR
 			if ( mTextPointer < (mName + sizeof(mName)) ) {
-				*mTextPointer = 0; /* Zero terminate */
-				if (strcmp(mName, checksumTagName) == 0) {
+				*mTextPointer = 0; /* Zero terminate if there is space in the buffer*/
+				if (strcmp(mName, checksumTagName) == 0) {  //Checksum name value for the whole frame
 					mState = CHECKSUM;
 					break;
 				}
 			}
-			mTextPointer = mValue; /* Reset value pointer */
+			mTextPointer = mValue; /* Reset pointer to start recording the value text*/
 			mState = RECORD_VALUE;
 			break;
 		default:
-			// add byte to name, but do no overflow
-			if ( mTextPointer < (mName + sizeof(mName)) )
+			// add byte to name, but do not overflow and leave space for null termination
+			if ( mTextPointer < (mName + sizeof(mName)-1) )
 				*mTextPointer++ = inbyte;
 			break;
 		}
 		break;
 	case RECORD_VALUE:
-		// The record value is being received.  The \r indicates a new record.
+		// The record value is being received.  The \r\n indicates a new record.
 		switch(inbyte) {
 		case '\n':
 			// forward record, only if it could be stored completely
 			if ( mTextPointer < (mValue + sizeof(mValue)) ) {
 				*mTextPointer = 0; // make zero ended
-				textRxEvent(mName, mValue);
+				textRxEvent(mName, mValue); //Process the name value pair
 			}
 			mState = RECORD_BEGIN;
 			break;
 		case '\r': /* Skip */
 			break;
 		default:
-			// add byte to value, but do no overflow
-			if ( mTextPointer < (mValue + sizeof(mValue)) )
+			// add byte to value, but do not overflow and leave space for null termination
+			if ( mTextPointer < (mValue + sizeof(mValue)-1) )
 				*mTextPointer++ = inbyte;
 			break;
 		}
 		break;
 	case CHECKSUM:
 	{
-		bool valid = mChecksum == 0;
+		bool valid = (mChecksum == 0);
 		if (!valid)
-			logE(MODULE,"[CHECKSUM] Invalid frame");
+			logE(MODULE,(char*)"[CHECKSUM] Invalid frame");
 		mChecksum = 0;
-		mState = IDLE;
+		mState = IDLE;  //Wait for start of whole next Record Block
 		frameEndEvent(valid);
 		break;
 	}
@@ -154,9 +155,12 @@ void VeDirectFrameHandler::rxData(uint8_t inbyte)
  * This function is called every time a new name/value is successfully parsed.  It writes the values to the temporary buffer.
  */
 void VeDirectFrameHandler::textRxEvent(char * mName, char * mValue) {
-    strcpy(tempName[frameIndex], mName);    // copy name to temporary buffer
-    strcpy(tempValue[frameIndex], mValue);  // copy value to temporary buffer
-	frameIndex++;
+	if ((strlen(mName)<sizeof(tempName[frameIndex])) && (strlen(mValue)<sizeof(tempValue[frameIndex]))) {
+		strcpy(tempName[frameIndex], mName);    // copy name to temporary buffer
+		strcpy(tempValue[frameIndex], mValue);  // copy value to temporary buffer
+		if (frameIndex < frameLen) frameIndex++; //Prevent overruns if too many name value pairs are received.
+
+	}
 }
 
 /*
@@ -179,9 +183,8 @@ void VeDirectFrameHandler::frameEndEvent(bool valid) {
 			if ( !nameExists ) {
 				strcpy(veName[veEnd], tempName[i]);				// write new Name to public buffer
 				strcpy(veValue[veEnd], tempValue[i]);			// write new Value to public buffer
-				veEnd++;										// increment end of public buffer
-				if ( veEnd >= buffLen ) {						// stop any buffer overrun
-					veEnd = buffLen - 1;
+				if ( veEnd < (buffLen-1) ) {						// stop any buffer overrun
+					veEnd++;										// increment end of public buffer
 				}
 			}
 		}
